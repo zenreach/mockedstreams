@@ -32,7 +32,7 @@ object MockedStreams {
 
   case class Record(topic: String, key: Array[Byte], value: Array[Byte])
 
-  case class Builder(driver: Driver = null,
+  case class Builder(driver: Option[Driver] = None,
                      configuration: Properties = new Properties(),
                      stateStores: Seq[String] = Seq(),
                      stateStoresContent: Map[String, Seq[(Any, Any)]] = Map(),
@@ -40,7 +40,7 @@ object MockedStreams {
     def config(configuration: Properties) = this.copy(configuration = configuration)
 
     def topology(func: (KStreamBuilder => Unit)) = {
-      this.copy(driver = stream(Some(func)))
+      this.copy(driver = Some(stream(Some(func))))
     }
 
     def stores(stores: Seq[String]) = this.copy(stateStores = stores)
@@ -117,12 +117,17 @@ object MockedStreams {
       if(inputs.isEmpty)
         throw new NoInputSpecified
 
-      produce(driver)
-      val result: T = f(driver)
-      driver.close
+      if(driver.isEmpty)
+        throw new NoDriverSpecified
+
+      produce(driver.get)
+      val result: T = f(driver.get)
+      driver.get.close
       result
     }
   }
+
+  class NoDriverSpecified extends Exception("No driver specified. Call topology() on builder.")
 
   class NoTopologySpecified extends Exception("No topology specified. Call topology() on builder.")
 
