@@ -21,7 +21,7 @@ import java.util.{Properties, UUID}
 import org.apache.kafka.common.serialization.Serde
 import org.apache.kafka.streams.StreamsConfig
 import org.apache.kafka.streams.kstream.KStreamBuilder
-import org.apache.kafka.streams.state.ReadOnlyWindowStore
+import org.apache.kafka.streams.state.{KeyValueStore, ReadOnlyWindowStore}
 import org.apache.kafka.test.{ProcessorTopologyTestDriver => Driver}
 
 import scala.collection.JavaConverters._
@@ -70,6 +70,12 @@ object MockedStreams {
 
     def outputTable[K, V](topic: String, key: Serde[K], value: Serde[V], size: Int): Map[K, V] =
       output[K, V](topic, key, value, size).toMap
+
+    def getStateStore[K, V](name: String): KeyValueStore[K, V] = {
+      withProcessedDriver { driver =>
+        return driver.getKeyValueStore[K, V](name)
+      }
+    }
 
     def stateTable(name: String): Map[Nothing, Nothing] = withProcessedDriver { driver =>
       val records = driver.getKeyValueStore(name).all()
