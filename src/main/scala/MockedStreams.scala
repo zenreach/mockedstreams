@@ -21,7 +21,7 @@ import java.util.{Properties, UUID}
 import org.apache.kafka.common.serialization.Serde
 import org.apache.kafka.streams.StreamsConfig
 import org.apache.kafka.streams.kstream.KStreamBuilder
-import org.apache.kafka.streams.state.{KeyValueStore, ReadOnlyWindowStore}
+import org.apache.kafka.streams.state.ReadOnlyWindowStore
 import org.apache.kafka.test.{ProcessorTopologyTestDriver => Driver}
 
 import scala.collection.JavaConverters._
@@ -32,14 +32,16 @@ object MockedStreams {
 
   case class Record(topic: String, key: Array[Byte], value: Array[Byte])
 
-  case class Builder(topology: Option[(KStreamBuilder => Unit)] = None,
+  case class Builder(driver: Driver = null,
                      configuration: Properties = new Properties(),
                      stateStores: Seq[String] = Seq(),
+                     stateStoresContent: Map[String, Seq[(Any, Any)]] = Map(),
                      inputs: List[Record] = List.empty) {
-
     def config(configuration: Properties) = this.copy(configuration = configuration)
 
-    def topology(func: (KStreamBuilder => Unit)) = this.copy(topology = Some(func))
+    def topology(func: (KStreamBuilder => Unit)) = {
+      this.copy(driver = stream(Some(func)))
+    }
 
     def stores(stores: Seq[String]) = this.copy(stateStores = stores)
 
@@ -71,12 +73,6 @@ object MockedStreams {
     def outputTable[K, V](topic: String, key: Serde[K], value: Serde[V], size: Int): Map[K, V] =
       output[K, V](topic, key, value, size).toMap
 
-    def getStateStore[K, V](name: String): KeyValueStore[K, V] = {
-      withProcessedDriver { driver =>
-        return driver.getKeyValueStore[K, V](name)
-      }
-    }
-
     def stateTable(name: String): Map[Nothing, Nothing] = withProcessedDriver { driver =>
       val records = driver.getKeyValueStore(name).all()
       val list = records.asScala.toList.map { record => (record.key, record.value) }
@@ -94,7 +90,7 @@ object MockedStreams {
     }
 
     // state store is temporarily created in ProcessorTopologyTestDriver
-    private def stream = {
+    private def stream(topology: Option[(KStreamBuilder => Unit)] = None): Driver = {
       val props = new Properties
       props.put(StreamsConfig.APPLICATION_ID_CONFIG, s"mocked-${UUID.randomUUID().toString}")
       props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092")
@@ -121,7 +117,6 @@ object MockedStreams {
       if(inputs.isEmpty)
         throw new NoInputSpecified
 
-      val driver = stream
       produce(driver)
       val result: T = f(driver)
       driver.close
